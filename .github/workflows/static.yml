@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jouw Homegym Trainingsplan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A task-oriented SPA with primary navigation buttons to select one of three workout splits (Push, Pull, Benen & Core). When a workout is selected, its detailed exercises are displayed in a central content area as clean cards. Simultaneously, a dynamic donut chart updates to visually represent the muscle group focus of the chosen routine. This structure was chosen for its directness and clarity. It allows the user to easily compare the different routines and access the detailed information for a specific training session without leaving the page, directly addressing the user's request for compiled sets in an easy-to-use format. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Three distinct workout plans. Goal: Organize & Inform. Viz/Method: Interactive HTML Cards. Interaction: Click buttons to show the relevant workout plan. Justification: Clear, scannable, and focused presentation of each workout routine. Method: HTML/CSS/JS.
+        - Report Info: Muscle group focus for each workout. Goal: Compare & Inform. Viz/Method: Dynamic Don't Chart. Interaction: Chart updates automatically upon workout selection. Justification: Provides a quick, visual summary of each workout's primary target areas, adding an analytical layer. Library: Chart.js (Canvas).
+        - Report Info: Exercise details (sets, reps, equipment). Goal: Inform. Viz/Method: Textual information with Unicode icons. Interaction: None. Justification: Icons provide quick visual cues for required equipment without clutter. Method: HTML/Unicode.
+        - NEW FEATURE: Exercise alternative suggestions using LLM. Goal: Enhance flexibility & inform. Viz/Method: Modal with LLM-generated text/structured data. Interaction: Button click triggers LLM call and displays suggestion. Justification: Provides dynamic, context-aware alternatives for exercises, increasing the app's utility and adaptability for the user's home gym setup. Method: Gemini API call (gemini-2.0-flash) for text generation.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            width: 100%;
+            max-width: 320px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+                max-width: 350px;
+            }
+        }
+        .nav-button {
+            transition: all 0.3s ease;
+        }
+        .nav-button.active {
+            background-color: #374151; /* dark-gray-700 */
+            color: #ffffff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        /* Modal styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            max-width: 500px;
+            width: 90%;
+            position: relative;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .close-button {
+            color: #aaa;
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: #000;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800">
+
+    <div class="container mx-auto px-4 py-8 md:py-12">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Jouw Homegym Trainingsplan</h1>
+            <p class="mt-2 text-lg text-stone-600 max-w-2xl mx-auto">Samengesteld voor jouw gear: verstelbare dumbells, een bankje en een pull-up stang. Kies een training om te beginnen.</p>
+        </header>
+
+        <nav id="workout-nav" class="flex flex-col sm:flex-row justify-center gap-3 md:gap-4 mb-10">
+            <button data-workout="push" class="nav-button w-full sm:w-auto text-base font-semibold bg-white text-stone-700 py-3 px-6 rounded-lg shadow-sm border border-stone-200 hover:bg-stone-100">
+                💪 Training 1: Push Dag
+            </button>
+            <button data-workout="pull" class="nav-button w-full sm:w-auto text-base font-semibold bg-white text-stone-700 py-3 px-6 rounded-lg shadow-sm border border-stone-200 hover:bg-stone-100">
+                🏋️ Training 2: Pull Dag
+            </button>
+            <button data-workout="legs" class="nav-button w-full sm:w-auto text-base font-semibold bg-white text-stone-700 py-3 px-6 rounded-lg shadow-sm border border-stone-200 hover:bg-stone-100">
+                🤸 Training 3: Benen & Core
+            </button>
+        </nav>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12 items-start">
+            <div id="workout-display" class="lg:col-span-2 bg-white p-6 md:p-8 rounded-xl shadow-md border border-stone-200">
+                
+            </div>
+
+            <aside class="lg:col-span-1 sticky top-8">
+                <div class="bg-white p-6 rounded-xl shadow-md border border-stone-200">
+                    <h3 class="text-xl font-bold text-center mb-4 text-gray-800">Spiergroep Focus</h3>
+                    <p id="chart-intro" class="text-center text-stone-600 text-sm mb-4">Dit is de verdeling van de spiergroepen die je traint in de geselecteerde workout.</p>
+                    <div class="chart-container">
+                        <canvas id="muscle-chart"></canvas>
+                    </div>
+                </div>
+                 <div class="bg-white p-6 rounded-xl shadow-md border border-stone-200 mt-8">
+                    <h3 class="text-xl font-bold text-center mb-4 text-gray-800">Belangrijke Tips</h3>
+                    <ul class="space-y-3 text-stone-600">
+                        <li class="flex items-start"><span class="mr-2">🔥</span><div><span class="font-semibold">Warming-up:</span> Begin elke training met 5-10 minuten lichte cardio en dynamische stretches.</div></li>
+                        <li class="flex items-start"><span class="mr-2">💧</span><div><span class="font-semibold">Rust:</span> Neem ongeveer 60-90 seconden rust tussen de sets.</div></li>
+                        <li class="flex items-start"><span class="mr-2">📈</span><div><span class="font-semibold">Progressie:</span> Probeer elke week iets zwaarder te gaan of een herhaling meer te doen.</div></li>
+                         <li class="flex items-start"><span class="mr-2">🧘</span><div><span class="font-semibold">Cooling-down:</span> Sluit af met 5 minuten stretchen van de getrainde spieren.</div></li>
+                    </ul>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Alternative Exercise Modal -->
+    <div id="alternative-modal" class="modal hidden">
+        <div class="modal-content">
+            <span class="close-button" id="close-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-800">✨ Alternatieve Oefening ✨</h3>
+            <div id="modal-content-area" class="text-stone-700">
+                <!-- Content will be loaded here -->
+                <div id="modal-loading" class="text-center text-stone-500 hidden">
+                    <div class="animate-spin inline-block w-8 h-8 border-4 border-t-4 border-stone-200 border-t-stone-500 rounded-full"></div>
+                    <p class="mt-2">Zoekt naar een alternatief...</p>
+                </div>
+                <div id="modal-result" class="hidden">
+                    <div class="bg-stone-50 border border-stone-200 p-4 rounded-lg flex items-start space-x-4">
+                        <div id="alt-exercise-icon" class="text-2xl pt-1"></div>
+                        <div class="flex-grow">
+                            <h4 id="alt-exercise-name" class="font-bold text-lg text-stone-800"></h4>
+                            <p id="alt-exercise-details" class="text-stone-600"></p>
+                            <p id="alt-exercise-tip" class="text-sm text-stone-500 mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+                <div id="modal-error" class="text-center text-red-500 hidden">
+                    <p>Er is een fout opgetreden bij het zoeken naar een alternatief. Probeer het later opnieuw.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const workoutData = {
+            push: {
+                title: 'Training 1: Push Dag (Borst, Schouders, Triceps)',
+                intro: 'Deze workout focust op alle duw-bewegingen. Je traint je borst, de voorkant en zijkant van je schouders, en je triceps. Dit zorgt voor een krachtig en gebalanceerd bovenlichaam.',
+                exercises: [
+                    { name: 'Dumbbell Bench Press', sets: '4 sets', reps: '8-12 reps', icon: '🏋️', tip: 'Houd je schouderbladen samengeknepen op het bankje.' },
+                    { name: 'Incline Dumbbell Press', sets: '3 sets', reps: '8-12 reps', icon: '🏋️', tip: 'Focust op de bovenkant van je borstspieren.' },
+                    { name: 'Standing Dumbbell Shoulder Press', sets: '3 sets', reps: '8-12 reps', icon: '🏋️', tip: 'Span je core aan om je rug recht te houden.' },
+                    { name: 'Dumbbell Lateral Raises', sets: '3 sets', reps: '12-15 reps', icon: '🏋️', tip: 'Houd een lichte buiging in je ellebogen.' },
+                    { name: 'Tricep Dips (op bankje)', sets: '3 sets', reps: 'Tot falen', icon: '🤸', tip: 'Hoe verder je voeten, hoe zwaarder de oefening.' },
+                    { name: 'Push-ups', sets: '3 sets', reps: 'Tot falen', icon: '🤸', tip: 'Houd je lichaam in een rechte lijn van hoofd tot hielen.' }
+                ],
+                chartData: {
+                    labels: ['Borst', 'Schouders', 'Triceps'],
+                    data: [45, 35, 20],
+                    colors: ['#6d28d9', '#a78bfa', '#d8b4fe']
+                }
+            },
+            pull: {
+                title: 'Training 2: Pull Dag (Rug, Biceps)',
+                intro: 'Vandaag train je alle trek-bewegingen. Dit versterkt je hele rug en je biceps. Een sterke rug is essentieel voor een goede houding en het voorkomen van blessures.',
+                exercises: [
+                    { name: 'Pull-ups / Chin-ups', sets: '4 sets', reps: 'Tot falen', icon: '💪', tip: 'Gebruik een brede grip voor pull-ups, smalle grip voor chin-ups.' },
+                    { name: 'Bent Over Dumbbell Rows', sets: '4 sets', reps: '8-12 reps', icon: '🏋️', tip: 'Houd je rug recht en parallel aan de vloer.' },
+                    { name: 'Single Arm Dumbbell Row', sets: '3 sets', reps: '8-12 reps p.a.', icon: '🏋️', tip: 'Trek de dumbbell naar je heup, niet recht omhoog.' },
+                    { name: 'Dumbbell Bicep Curls', sets: '3 sets', reps: '10-15 reps', icon: '🏋️', tip: 'Voorkom zwaaien met je bovenlichaam.' },
+                    { name: 'Reverse Flys', sets: '3 sets', reps: '12-15 reps', icon: '🏋️', tip: 'Focust op de achterkant van je schouders en bovenrug.' }
+                ],
+                chartData: {
+                    labels: ['Rug', 'Biceps', 'Schouders (achter)'],
+                    data: [60, 25, 15],
+                    colors: ['#16a34a', '#4ade80', '#bbf7d0']
+                }
+            },
+            legs: {
+                title: 'Training 3: Benen & Core',
+                intro: 'Een complete workout voor je onderlichaam en je core. Sterke benen vormen de fundering van je lichaam, en een stabiele core is cruciaal voor bijna elke beweging.',
+                exercises: [
+                    { name: 'Dumbbell Goblet Squats', sets: '4 sets', reps: '10-15 reps', icon: '🏋️', tip: 'Houd de dumbbell tegen je borst en je rug recht.' },
+                    { name: 'Dumbbell Lunges', sets: '3 sets', reps: '10-12 reps p.b.', icon: '🏋️', tip: 'Zet een grote stap voorwaarts en zak recht naar beneden.' },
+                    { name: 'Dumbbell Romanian Deadlifts', sets: '3 sets', reps: '10-15 reps', icon: '🏋️', tip: 'Houd een lichte buiging in je knieën en focus op de stretch in je hamstrings.' },
+                    { name: 'Calf Raises', sets: '4 sets', reps: '15-20 reps', icon: '🏋️', tip: 'Houd een dumbbell vast voor extra gewicht.' },
+                    { name: 'Plank', sets: '3 sets', reps: 'Houd zo lang mogelijk', icon: '🤸', tip: 'Voorkom dat je heupen doorzakken.' },
+                    { name: 'Lying Leg Raises', sets: '3 sets', reps: '15-20 reps', icon: '🤸', tip: 'Houd je onderrug tegen de grond gedrukt.' }
+                ],
+                chartData: {
+                    labels: ['Quads', 'Hamstrings/Glutes', 'Core', 'Kuiten'],
+                    data: [40, 30, 20, 10],
+                    colors: ['#2563eb', '#60a5fa', '#93c5fd', '#bfdbfe']
+                }
+            }
+        };
+
+        const workoutDisplay = document.getElementById('workout-display');
+        const navButtons = document.querySelectorAll('.nav-button');
+        let muscleChart;
+
+        const alternativeModal = document.getElementById('alternative-modal');
+        const closeModalButton = document.getElementById('close-modal');
+        const modalLoading = document.getElementById('modal-loading');
+        const modalResult = document.getElementById('modal-result');
+        const modalError = document.getElementById('modal-error');
+        const altExerciseIcon = document.getElementById('alt-exercise-icon');
+        const altExerciseName = document.getElementById('alt-exercise-name');
+        const altExerciseDetails = document.getElementById('alt-exercise-details');
+        const altExerciseTip = document.getElementById('alt-exercise-tip');
+
+        function displayWorkout(workoutKey) {
+            const data = workoutData[workoutKey];
+            let html = `<h2 class="text-2xl md:text-3xl font-bold mb-2 text-gray-800">${data.title}</h2>`;
+            html += `<p class="text-stone-600 mb-6">${data.intro}</p>`;
+            html += '<div class="space-y-4">';
+
+            data.exercises.forEach(ex => {
+                html += `
+                    <div class="bg-stone-50 border border-stone-200 p-4 rounded-lg flex items-start space-x-4">
+                        <div class="text-2xl pt-1">${ex.icon}</div>
+                        <div class="flex-grow">
+                            <h4 class="font-bold text-lg text-stone-800">${ex.name}</h4>
+                            <p class="text-stone-600">${ex.sets} / ${ex.reps}</p>
+                            <p class="text-sm text-stone-500 mt-1">${ex.tip}</p>
+                            <button data-exercise-name="${ex.name}" class="suggest-alternative-button mt-3 px-4 py-2 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 transition-colors duration-200 shadow-sm">
+                                ✨ Suggestie Alternatief
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            workoutDisplay.innerHTML = html;
+
+            // Add event listeners for new buttons
+            document.querySelectorAll('.suggest-alternative-button').forEach(button => {
+                button.addEventListener('click', handleSuggestAlternative);
+            });
+        }
+        
+        function updateChart(workoutKey) {
+            const data = workoutData[workoutKey].chartData;
+            if (muscleChart) {
+                muscleChart.data.labels = data.labels;
+                muscleChart.data.datasets[0].data = data.data;
+                muscleChart.data.datasets[0].backgroundColor = data.colors;
+                muscleChart.update();
+            }
+        }
+
+        function handleNavClick(e) {
+            const clickedButton = e.currentTarget;
+            const workoutKey = clickedButton.dataset.workout;
+            
+            navButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+            clickedButton.classList.add('active');
+
+            displayWorkout(workoutKey);
+            updateChart(workoutKey);
+        }
+
+        async function handleSuggestAlternative(e) {
+            const exerciseName = e.currentTarget.dataset.exerciseName;
+            
+            alternativeModal.classList.remove('hidden');
+            modalLoading.classList.remove('hidden');
+            modalResult.classList.add('hidden');
+            modalError.classList.add('hidden');
+
+            const prompt = `Suggest ONE alternative exercise for '${exerciseName}' suitable for a home gym with the following equipment: adjustable dumbbells, a bench, a pull-up bar, and bodyweight. Provide the response in JSON format with the following keys: 'name' (string, exercise name), 'sets' (string, e.g., '3 sets'), 'reps' (string, e.g., '8-12 reps'), 'icon' (string, a relevant Unicode emoji icon), 'tip' (string, a brief tip for the exercise). Ensure the suggestion is a practical alternative and fits the context of the original exercise's muscle group focus.`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+
+            const payload = {
+                contents: chatHistory,
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "name": { "type": "STRING" },
+                            "sets": { "type": "STRING" },
+                            "reps": { "type": "STRING" },
+                            "icon": { "type": "STRING" },
+                            "tip": { "type": "STRING" }
+                        },
+                        "required": ["name", "sets", "reps", "icon", "tip"]
+                    }
+                }
+            };
+
+            const apiKey = ""; // If you want to use models other than gemini-2.0-flash or imagen-3.0-generate-002, provide an API key here. Otherwise, leave this as-is.
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                modalLoading.classList.add('hidden');
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const jsonResponse = JSON.parse(result.candidates[0].content.parts[0].text);
+                    
+                    altExerciseIcon.textContent = jsonResponse.icon || '❓';
+                    altExerciseName.textContent = jsonResponse.name || 'Onbekende Oefening';
+                    altExerciseDetails.textContent = `${jsonResponse.sets || 'N/A'} / ${jsonResponse.reps || 'N/A'}`;
+                    altExerciseTip.textContent = jsonResponse.tip || 'Geen specifieke tip beschikbaar.';
+                    modalResult.classList.remove('hidden');
+                } else {
+                    modalError.classList.remove('hidden');
+                    console.error('Unexpected API response structure:', result);
+                }
+            } catch (error) {
+                modalLoading.classList.add('hidden');
+                modalError.classList.remove('hidden');
+                console.error('Error fetching alternative exercise:', error);
+            }
+        }
+
+        closeModalButton.addEventListener('click', () => {
+            alternativeModal.classList.add('hidden');
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target == alternativeModal) {
+                alternativeModal.classList.add('hidden');
+            }
+        });
+
+        function init() {
+            const ctx = document.getElementById('muscle-chart').getContext('2d');
+            muscleChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Spiergroep Focus',
+                        data: [],
+                        backgroundColor: [],
+                        borderColor: '#ffffff',
+                        borderWidth: 3,
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 20,
+                                font: {
+                                    size: 14,
+                                    family: "'Inter', sans-serif"
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += context.parsed + '%';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            navButtons.forEach(button => {
+                button.addEventListener('click', handleNavClick);
+            });
+            
+            navButtons[0].click(); // Load the first workout by default
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
